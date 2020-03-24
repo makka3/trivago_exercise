@@ -1,0 +1,499 @@
+---
+title: "Hotel Click Prediction Exercise: EDA + Bonus Questions"
+output: 
+  html_document: 
+    toc : True
+author: "Mohamad Makkawi"
+date: November 3, 2019
+---
+
+#### Loading necessary packages
+
+```{r, warning=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(scales))
+```
+
+#### Loading train dataset
+
+```{r,message=FALSE}
+train <- read_csv("train_set.csv")
+```
+
+#### Peaking at the dataframe
+
+```{r}
+head(train)
+```
+
+#### Summary statistics
+
+```{r}
+summary(train)
+```
+
+# Exploratory Data Analysis
+
+## Hotel_ID
+
+Notes:
+
+* Hotel ID's are unique identifiers, no duplicates.
+
+## City ID
+
+```{r}
+head(train %>%
+  #select(city_id) %>%
+  filter(is.na(city_id)))
+```
+
+Notes:
+
+* 508 NA's in city_id all missing content_score, n_images, distance_to_center, avg_rating, stars, n_reviews. Should be removed.
+
+#### Highest city counts
+
+```{r}
+head(train %>%
+  select(city_id) %>%
+  drop_na() %>%
+  group_by(city_id) %>%
+  summarize(number_of_hotels=n()) %>%
+  arrange(desc(number_of_hotels)))
+```
+
+#### City_id vs. number of clicks
+
+```{r}
+train %>%
+  select(city_id,n_clicks)%>%
+  drop_na()%>%
+  ggplot(aes(city_id,n_clicks))+
+  geom_point(alpha=0.2)
+```
+
+Notes:
+
+* Many cities with 0 n_clicks. Will probably be a strong predictor.
+
+## Content Score
+
+```{r}
+train %>%
+  select(content_score)%>%
+  drop_na()%>%
+  ggplot(aes(content_score))+
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of Content Scores")+
+  scale_x_continuous(breaks = pretty_breaks(20))
+```
+
+Notes:
+
+* 508 NA's
+* Fairly skewed to the right, i.e. more content scores between 40 and 80.
+* Might be a combined score of other variables in this training set
+
+#### Content Score vs. n_clicks
+
+```{r}
+train %>%
+  select(content_score,n_clicks)%>%
+  drop_na()%>%
+  ggplot(aes(content_score,n_clicks))+
+  geom_point()+
+  ggtitle("Content Score vs. n_clicks")+
+  scale_x_continuous(breaks = pretty_breaks(15))
+```
+
+Notes:
+
+* Higher number of clicks seem to be concentrated within a certain window (55-75).
+
+## Number of images
+
+```{r}
+train %>%
+  select(n_images)%>%
+  mutate(n_images_distribution = if_else(n_images>250,"Above 250",if_else(n_images<0,"Negative","Below 250"))) %>%
+  group_by(n_images_distribution)%>%
+  summarize(n=n())
+```
+
+Notes:
+
+* 250 images is the cutoff for outliers.
+
+#### Looking at distribution of images within normal range (0-50 images)
+
+```{r}
+train %>%
+  select(n_images) %>%
+  drop_na() %>%
+  filter(n_images < 50 & n_images > -1)%>%
+  ggplot(aes(n_images))+
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of n_images within normal range (0-50 images)")
+```
+
+```{r}
+train %>%
+  select(n_images,n_clicks)%>%
+  drop_na()%>%
+  filter(n_images < 50 & n_images > -1)%>%
+  ggplot(aes(n_images,n_clicks))+
+  geom_point(alpha=0.2)+
+  ggtitle("Number of images vs. Number of clicks")
+```
+
+Notes:
+
+* A higher number of image (20+) seems to be negatively correlated with n_clicks.
+
+## Distance to center
+
+#### Distribution of distance to nearest city center
+
+```{r}
+train %>%
+  select(distance_to_center) %>%
+  filter(distance_to_center != 0 & distance_to_center < 50000) %>%
+  ggplot(aes(distance_to_center/1000)) +
+  geom_histogram(binwidth = 0.1) +
+  scale_x_continuous(breaks = pretty_breaks(15))+
+  ggtitle("Distribution of hotels distance to nearest city center") + xlab("Distance to nearest city center (Km)")
+```
+
+Notes:
+
+* Some very large distances to the nearest city center (i.e. over 1000 km)
+* Entries with a distance to center that is zero is 19,260 aka hotel is in city center
+* Peaks around 200-500 meters and slowly decreases after that
+
+#### Distance to center vs. n_clicks
+
+```{r}
+train %>%
+  select(distance_to_center,n_clicks)%>%
+  drop_na() %>%
+  filter(distance_to_center<100000)%>%
+  ggplot(aes(distance_to_center/1000,n_clicks))+
+  scale_x_continuous(breaks = pretty_breaks(15))+
+  geom_point(alpha=0.2)+ xlab("Distance to nearest city center (Km)")+
+  ggtitle("Distance to city center (Km) vs. Number of clicks")
+```
+
+Notes:
+
+* Hotels that are closer to the city center seem to receive more clicks.
+* A huge decrease in clicks appears after about 25 Km of distance from city center.
+
+## Average rating
+
+```{r}
+train %>%
+  select(avg_rating) %>%
+  drop_na() %>%
+  ggplot(aes(avg_rating))+
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of average rating")+
+  scale_x_continuous(breaks = pretty_breaks(10))
+```
+
+#### Avg. rating vs. n_clicks
+
+```{r}
+train %>%
+  select(avg_rating,n_clicks) %>%
+  drop_na() %>%
+  #filter(avg_rating != 0 & n_clicks != 0)%>%
+  ggplot(aes(avg_rating,n_clicks))+
+  geom_point(alpha=0.2)+
+  ggtitle("Avg. rating vs. number of clicks")
+```
+
+
+```{r}
+head(train %>%
+  filter(stars == 0 & is.na(avg_rating)))
+```
+
+#### NA's in avg. rating vs. n_clicks
+
+```{r}
+train %>%
+  select(avg_rating,n_clicks) %>%
+  filter(is.na(avg_rating)) %>%
+  #summarize(mean(n_clicks))
+  ggplot(aes(n_clicks))+
+  geom_histogram(binwidth = 2)+
+  xlim(c(-1,50))+
+  ggtitle("Distribution of n_clicks for NA's in avg_rating")
+```
+
+Notes:
+
+For NA's:
+
+* All 100000+ NA avg_ratings have zero reviews and most have zero stars --> Could be new additions to the roster.
+* Stars is also 0 for most of the NA's
+* Their mean n_clicks is 1.42 which indicates that the majority of them received zero clicks. This is confirmed in the histogram above.
+* Most of the NA's are hotels that haven't been rated yet.
+
+For non-NA's:
+
+* Skewed and normally distributed
+* Average around 80
+
+## Stars
+
+```{r}
+train %>%
+  select(stars) %>%
+  group_by(stars) %>%
+  summarize(count=n()) %>%
+  drop_na()%>%
+  ggplot(aes(stars,count))+
+  geom_col()+
+  scale_x_continuous(breaks = pretty_breaks(6))+
+  ggtitle("Distribution of hotels by stars")
+```
+
+#### Stars vs. number of clicks
+
+```{r}
+train %>%
+  drop_na() %>%
+  ggplot(aes(stars,n_clicks,group=stars))+
+  geom_boxplot()+
+  ggtitle("Stars vs. n_clicks")
+```
+
+#### Mean clicks by stars
+
+```{r}
+train %>%
+  drop_na()%>%
+  group_by(stars) %>%
+  summarize(mean_n_clicks = mean(n_clicks))
+```
+
+Notes:
+
+* Majority of entries have zero stars
+* Of the hotels that have at least 1 star, it is a normal distribution with 3 stars as the mean.
+* Hotels that have star rating 4,5 have a much higher average number of clicks. This is expected.
+
+## Number of reviews
+
+#### Distribution of hotels by number of reviews
+
+```{r}
+train %>%
+  select(n_reviews) %>%
+  filter(n_reviews != 0 & n_reviews < 5000)%>%
+  ggplot(aes(n_reviews))+
+  geom_histogram(binwidth = 3)+
+  ggtitle("Distribution of hotels by number of reviews")
+```
+
+#### Hotel reviews vs. n_clicks
+
+```{r}
+train %>%
+  select(n_reviews,n_clicks) %>%
+  filter(n_reviews < 50000) %>%
+  ggplot(aes(n_reviews,n_clicks))+
+  geom_point(alpha = 0.1)+
+  ggtitle("Hotel reviews vs. n_clicks")
+```
+
+Notes:
+
+* Minimum number of reviews is 0, count is 109,869. This is probably related to the NA's in avg. rating i.e. newer hotels.
+* Minimum number of reviews is other than 0 is 60, which about 4000 exactly at 60.
+* Numbers of reviews are multiples of 3. So, 60, 63, 66 and so on.
+* Up until 15000 reviews, the effects on n_clicks are fairly consistent. After that they begin to taper off, indicating that the difference between 10000 and 40000 reviews has a negligible effect on n_clicks.
+
+## Average rank
+
+#### Distribution of hotels by average rank
+
+```{r}
+train %>%
+  select(avg_rank) %>%
+  ggplot(aes(avg_rank)) +
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of average rank")
+```
+
+Notes:
+
+* Majority of ranks in between 1 - 25. Near negligible amounts from 25 - 100.
+* No missing values
+* Normally distributed with mean around 15.
+
+#### Looking at relationship between avg_rank and n_clicks
+
+```{r}
+train %>%
+  select(avg_rank,n_clicks) %>%
+  filter(avg_rank<26) %>%
+  ggplot(aes(avg_rank,n_clicks))+
+  geom_point(alpha=0.2)+
+  scale_x_continuous(breaks = pretty_breaks(25))+
+  ggtitle("Average rank of hotels vs. number of clicks")
+```
+
+Notes:
+
+* Clearly there is a preference towards hotels that are ranked higher.
+* Trend goes down as avg rank goes up.
+
+## Average Price
+
+#### Distribution of hotels by average price
+
+```{r}
+train %>%
+  select(avg_price) %>%
+  filter(avg_price<1000)%>%
+  ggplot(aes(avg_price))+
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of hotels by average price")
+```
+
+#### Average Price vs n_clicks
+
+```{r}
+train %>%
+  select(avg_price,n_clicks)%>%
+  filter(avg_price<2000)%>%
+  ggplot(aes(avg_price,n_clicks))+
+  geom_point(alpha=0.2)+
+  scale_x_continuous(breaks = pretty_breaks(10))+
+  xlab("Average price (Euro)")+
+  ggtitle("Average Price vs n_clicks")
+```
+
+Notes:
+
+* Very few prices above 1000 Euro's
+* Mean around 75-100 Euro's
+* Highest number of clicks occurs between 50 and 300 Euro.
+
+## Average saving percent
+
+#### Distribution of hotels by average saving percent
+
+```{r}
+train %>%
+  select(avg_saving_percent)%>%
+  filter(avg_saving_percent != 0) %>%
+  ggplot(aes(avg_saving_percent))+
+  geom_histogram(binwidth = 1)+
+  ggtitle("Distribution of hotels by average saving percent")
+```
+
+#### Average saving percentage vs. n_clicks
+
+```{r}
+
+train %>%
+  select(avg_saving_percent,n_clicks) %>%
+  ggplot(aes(avg_saving_percent,n_clicks))+
+  geom_point(alpha=0.1)+
+  ggtitle("Average saving percentage vs. n_clicks")
+
+```
+
+Notes:
+
+* Vast majority with 0 average saving percent (200000+)
+* For non-zero's, average saving percent decreases at a constant rate
+* Weak relationship between saving percent and n_clicks from looking at the graph.
+
+## Number of clicks (target)
+
+```{r}
+train %>%
+  select(n_clicks) %>%
+  filter(n_clicks != 0 & n_clicks < 300) %>%
+  #group_by(n_clicks)%>%
+  #summarize(n=n())
+  ggplot(aes(n_clicks))+
+  geom_histogram(binwidth = 2)+
+  ggtitle("Distribution of n_clicks")
+```
+
+Notes:
+
+* Vast majority of hotels have zero clicks on them
+* Number of clicks is a multiple of two
+* Very skewed i.e. many hotels have 2,4,6,8 clicks and not many clicks
+
+#### For modelling part, see Jupyter notebook attached in the exercise.
+
+# Bonus Questions
+
+1. Can you describe in your own words the purpose of the evaluation metric? What alternative metrics make sense in this context?
+
+Firstly, it is a relative/normalization error rather than an absolute one (plain mean squared error or mean absolute error), which penalizes errors relative to the value of the observed number of clicks.
+
+Other metrics that make sense are for example weighted normalized mean absolute error that would penalize bigger errors less and are less sensitive to outliers in the data.
+
+2. Click prediction is one element of Exposure Algorithms. What other components would you include to determine what advertiser or hotel to show our users?
+
+Personalization algorithms:
+
+* Session analysis and classification
+
+Analysis of users browsing habits and assessing how they interact with the links on the results page. Building a prediction model unique to each cluster of customers (based on their behaviour) that shows them the results that they would like to see. This could be in the form of more results per page, different viewing experience, more focus on the price, etc...
+
+* Recommendation systems:
+
+Content-based: Assessing various features for each hotel and recommending hotels similar to hotels that user has viewed in the past.
+
+Collaborative filtering:
+- Hotel-based: Users who clicked/liked on this hotel also clicked/liked on X
+- User-based: Users similar to you, also liked X
+
+Recommendation systems will probably be the biggest value add to the users experience as you can look at clusters of individuals/hotels and look at the hidden relationships with other users and predict what a user might like.
+
+* Social media reviews of hotels analysis: Incorporating external data related to social media reviews can add a whole lot to the prediction of what hotels people might like. In addition, incorporating time elements or recency information can help predict what hotels users might want to look at today.
+
+3. Which of the input variables have a high predictive power? What additional variables would you include to reduce the error further?
+
+Input variables with the highest predictive power were:
+
+* City_id
+* Avg_rank
+* N_reviews
+
+This makes sense, given that some cities are viewed less than other and this will result in less clicks. When it comes to average rank, this is the most obvious one as most visitors will click on the hotels that appear first in the rankings as opposed to the barrier which is flipping to the next page. Finally, when it comes to the number of reviews, individuals shopping for hotels will want to make sure that the hotel has been tried and tested by other individuals. People associated a higher number of reviews with more enjoyment at a hotel and thus will click it more.
+
+Other variables to add:
+
+- Hotel brand name or not
+- City information: How many visits does the city get
+- Sentiment analysis of reviews
+- Recency information: How recently has the hotel been rated/visited? Could give insight in terms of up-to-date quality rather than old news.
+
+Also, other things to consider: Metrics related to purchases rather than just clicks. Optimizing for number of clicks will not always lead to the best results for the advertisers/users. On the other hand, optimizing for purchases will give advertisers the most relevant information about the performance of their advertising dollars.
+
+4. In addition to the model you used to calculate your results, what are alternative models you could use for the prediction problem? What trade-offs between the model that you used and the alternatives?
+
+For this exercise, we went with a simple Gradient Boosted model without hyperparameter tuning.
+
+Alternative models included Random Forest, XGBoost, Adaboost or an ensemble of all of the above.
+
+Benefits of Gradient Boosting method:
+
+* Faster training when compared to Random Forest
+* Can solve/optimize for any objective function, especially in our case where counts are being predicted (although this isn't done in our predictions).
+
+Drawbacks:
+
+* More sensitive to overfitting
+* Less tuning options when compared ot Random Forest
